@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Défi du matin</title>
+<style>
+/* Monde unique : jeu d'arcade de l'aube. Ciel de nuit qui s'éclaire au fil de la partie.
+   Polices système uniquement : la page sera servie hors ligne par la carte STM32. */
+:root{
+  --nuit:#141a3a;
+  --violet:#2b2f6b;
+  --aube:#ff8f5a;
+  --soleil:#ffd166;
+  --menthe:#5fe0a0;
+  --rose:#ff5c7a;
+  --encre:#fff8ee;
+  --f-jeu: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Segoe UI Black", system-ui, sans-serif;
+  --f-chiffres: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--nuit);color:var(--encre);font-family:var(--f-jeu);overflow:hidden;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#ciel{position:fixed;inset:0;transition:background .8s ease}
+.etoile{position:absolute;width:3px;height:3px;border-radius:50%;background:#fff;animation:scintille 2.4s infinite alternate}
+@keyframes scintille{from{opacity:.15}to{opacity:.9}}
+#soleil{position:fixed;left:50%;width:240px;height:240px;margin-left:-120px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,var(--soleil) 0 36%,rgba(255,209,102,.35) 37% 54%,rgba(255,209,102,0) 70%);
+  bottom:-215px;transition:bottom .8s ease}
+#flash{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
+#app{position:relative;height:100%;max-width:460px;margin:0 auto;padding:14px 16px 22px;display:flex;flex-direction:column}
+.ecran{display:none;flex:1;flex-direction:column;gap:14px;min-height:0}
+.ecran.actif{display:flex}
+button{font:inherit;color:inherit;border:0;cursor:pointer;background:none}
+button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
+
+/* Bouton "3D" façon jeu mobile */
+.btn3d{border-radius:20px;padding:18px;font-weight:900;font-size:24px;letter-spacing:.04em;
+  background:var(--aube);color:#3b1606;box-shadow:0 7px 0 #b8542b,0 14px 24px rgba(0,0,0,.35);transition:transform .08s,box-shadow .08s}
+.btn3d:active{transform:translateY(5px);box-shadow:0 2px 0 #b8542b,0 6px 12px rgba(0,0,0,.35)}
+
+/* ----- Accueil ----- */
+.haut{display:flex;justify-content:space-between;align-items:center}
+.puce{font-size:12px;font-weight:800;letter-spacing:.12em;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.1)}
+#ecran-menu{align-items:center;justify-content:space-between}
+.logo{text-align:center;margin-top:8vh;line-height:.9}
+.logo span{display:block;font-weight:900;color:var(--soleil);
+  -webkit-text-stroke:2px #3b1606;text-shadow:0 6px 0 #3b1606,0 10px 24px rgba(0,0,0,.4)}
+.logo .l1{font-size:28px;color:var(--encre);letter-spacing:.3em}
+.logo .l2{font-size:64px;transform:rotate(-4deg);margin-top:6px}
+#rouleau{display:flex;gap:10px;justify-content:center}
+.tuile{width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.15);
+  display:grid;place-items:center;transition:transform .1s,background .1s}
+.tuile svg{width:30px;height:30px}
+.tuile.choisi{background:var(--soleil);border-color:#fff;transform:scale(1.18) translateY(-6px)}
+.tuile.choisi svg{color:#3b1606}
+#btn-jouer{width:100%;font-size:30px;padding:22px;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{transform:scale(1.03)}}
+#btn-jouer:active{animation:none}
+
+/* ----- Jeu ----- */
+.hud{display:flex;align-items:center;gap:10px}
+.hud .icone{width:44px;height:44px;border-radius:14px;background:var(--soleil);color:#3b1606;display:grid;place-items:center;box-shadow:0 4px 0 #b8892c}
+.hud .icone svg{width:26px;height:26px}
+#nom-jeu{flex:1;font-weight:900;font-size:22px}
+#chrono{font-family:var(--f-chiffres);font-variant-numeric:tabular-nums;font-weight:900;font-size:20px;padding:8px 12px;border-radius:14px;background:rgba(0,0,0,.3);min-width:64px;text-align:center}
+#chrono.urgent{color:var(--rose)}
+#etoiles{display:flex;gap:6px;justify-content:center;min-height:22px}
+#etoiles i{width:20px;height:20px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+  background:rgba(255,255,255,.18);transition:background .2s,transform .2s}
+#etoiles i.ok{background:var(--soleil);transform:scale(1.2)}
+#zone{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;position:relative}
+#toast{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;pointer-events:none;
+  font-weight:900;font-size:34px;padding:10px 20px;border-radius:18px;background:var(--encre);color:#3b1606;white-space:nowrap;
+  transition:transform .2s,opacity .2s;z-index:5;box-shadow:0 6px 0 rgba(0,0,0,.25)}
+#toast.vu{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#toast.mauvais{background:var(--rose);color:#fff}
+
+/* Intro d'un jeu : nom, règle, 3-2-1 */
+#intro{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;
+  background:rgba(14,18,44,.92);z-index:10;padding:24px}
+#intro.vu{display:flex}
+#intro .grosse{width:110px;height:110px;border-radius:30px;background:var(--soleil);color:#3b1606;display:grid;place-items:center;
+  box-shadow:0 8px 0 #b8892c;animation:tombe .4s cubic-bezier(.3,1.6,.6,1)}
+#intro .grosse svg{width:64px;height:64px}
+@keyframes tombe{from{transform:translateY(-60px) scale(.6);opacity:0}}
+#intro h2{margin:0;font-size:34px;font-weight:900}
+#intro p{margin:0;font-size:18px;font-weight:700;color:var(--soleil)}
+#decompte{font-size:72px;font-weight:900;font-family:var(--f-chiffres);animation:pop .5s}
+@keyframes pop{from{transform:scale(1.8);opacity:0}}
+
+/* Calcul */
+.question{font-family:var(--f-chiffres);font-weight:900;font-size:52px;text-align:center;padding-top:10px;font-variant-numeric:tabular-nums}
+.reponse{font-family:var(--f-chiffres);font-weight:900;font-size:42px;text-align:center;min-height:58px;margin:0 22%;border-radius:16px;background:rgba(0,0,0,.25)}
+.clavier{margin-top:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.clavier button{padding:14px 0;border-radius:16px;background:#3a3f86;font-family:var(--f-chiffres);font-weight:900;font-size:26px;box-shadow:0 5px 0 #23265a}
+.clavier button:active{transform:translateY(4px);box-shadow:0 1px 0 #23265a}
+.clavier .valider{background:var(--menthe);color:#0d3b25;box-shadow:0 5px 0 #2f9e68}
+.secoue{animation:secoue .35s}
+@keyframes secoue{25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
+
+/* Mémoire */
+.pads{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:14px;min-height:260px;padding-bottom:6px}
+.pad{border-radius:26px;opacity:.4;transition:opacity .1s,transform .1s;box-shadow:0 7px 0 rgba(0,0,0,.35)}
+.pad.allume{opacity:1;transform:scale(1.04)}
+
+/* Couleurs (piège) */
+.mot{font-weight:900;font-size:64px;text-align:center;padding:30px 0 10px;letter-spacing:.04em;-webkit-text-stroke:2px rgba(0,0,0,.3)}
+.pastilles{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pastilles button{height:96px;border-radius:24px;box-shadow:0 7px 0 rgba(0,0,0,.35)}
+.pastilles button:active{transform:translateY(5px);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+
+/* Chiffres en ordre */
+.grille{margin:auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grille button{aspect-ratio:1;border-radius:22px;background:#3a3f86;font-family:var(--f-chiffres);font-weight:900;font-size:40px;box-shadow:0 6px 0 #23265a}
+.grille button.fait{background:var(--menthe);color:#0d3b25;box-shadow:0 2px 0 #2f9e68;transform:translateY(4px)}
+
+/* Réflexes */
+#terrain{flex:1;position:relative;border-radius:26px;background:rgba(0,0,0,.25);min-height:300px;overflow:hidden}
+.cible{position:absolute;width:66px;height:66px;margin:-33px 0 0 -33px;border-radius:50%;
+  background:radial-gradient(circle,#fff 0 17%,var(--rose) 18% 44%,#fff 45% 55%,var(--rose) 56%);animation:pop .15s ease-out}
+
+/* Victoire */
+#ecran-gagne{align-items:center;justify-content:center;text-align:center;gap:18px}
+#ecran-gagne .titre{font-size:68px;font-weight:900;color:var(--soleil);-webkit-text-stroke:2px #3b1606;text-shadow:0 7px 0 #3b1606;
+  transform:rotate(-4deg);animation:tombe .5s cubic-bezier(.3,1.6,.6,1)}
+#note{display:flex;gap:10px}
+#note i{width:56px;height:56px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);background:rgba(59,22,6,.3)}
+#note i.ok{background:var(--soleil);animation:pop .4s backwards}
+#note i.ok:nth-child(2){animation-delay:.15s}#note i.ok:nth-child(3){animation-delay:.3s}
+#temps{font-family:var(--f-chiffres);font-weight:900;font-size:22px;padding:8px 16px;border-radius:14px;background:rgba(59,22,6,.35)}
+.alarme{font-weight:900;font-size:16px;letter-spacing:.12em;color:#3b1606;background:var(--menthe);padding:8px 14px;border-radius:999px}
+#btn-menu{margin-top:10px;width:100%}
+#btn-nfc{width:100%}
+[hidden]{display:none!important}
+.etape-badge{width:100%;display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:22px;background:#3b1606;color:var(--soleil);
+  text-align:left;box-shadow:0 7px 0 rgba(59,22,6,.45);animation:respire 1.4s infinite}
+.etape-badge svg{width:46px;height:46px;flex:none}
+.etape-badge b{display:block;font-size:24px;font-weight:900;letter-spacing:.03em}
+.etape-badge small{font-size:15px;font-weight:700;color:var(--encre);opacity:.85}
+@keyframes respire{50%{transform:scale(1.03)}}
+.confetti{position:fixed;top:-12px;width:10px;height:14px;border-radius:2px;pointer-events:none;animation:chute linear forwards;z-index:20}
+@keyframes chute{to{transform:translateY(110vh) rotate(720deg)}}
+
+/* ----- Réglages ----- */
+.engrenage{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.12);display:grid;place-items:center}
+.engrenage svg{width:22px;height:22px}
+.haut-droite{display:flex;gap:8px;align-items:center}
+#ecran-reglages{gap:12px;overflow-y:auto;padding-bottom:4px}
+.titre-reglages{display:flex;align-items:center;gap:10px}
+.titre-reglages h2{margin:0;font-size:26px;font-weight:900;letter-spacing:.04em}
+.carte{border-radius:22px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.carte h3{margin:0;font-size:13px;font-weight:800;letter-spacing:.14em;color:var(--soleil)}
+.heure-tel{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+#heure-tel{font-family:var(--f-chiffres);font-variant-numeric:tabular-nums;font-weight:900;font-size:40px}
+#sync{font-size:13px;font-weight:800;padding:6px 10px;border-radius:999px;background:rgba(95,224,160,.2);color:var(--menthe);white-space:nowrap}
+#sync.demo{background:rgba(255,255,255,.12);color:var(--encre)}
+.selecteur{display:flex;align-items:center;justify-content:center;gap:10px}
+.colonne{display:flex;flex-direction:column;align-items:center;gap:6px}
+.colonne button{width:64px;height:40px;border-radius:14px;background:#3a3f86;font-weight:900;font-size:24px;box-shadow:0 4px 0 #23265a}
+.colonne button:active{transform:translateY(3px);box-shadow:0 1px 0 #23265a}
+.valeur{font-family:var(--f-chiffres);font-variant-numeric:tabular-nums;font-weight:900;font-size:58px;line-height:1;color:var(--soleil)}
+.deux-points{font-weight:900;font-size:50px;color:var(--soleil);padding-bottom:4px}
+#jours{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+#jours button{height:42px;border-radius:12px;background:rgba(255,255,255,.1);font-weight:900;font-size:16px}
+#jours button.on{background:var(--soleil);color:#3b1606}
+.ligne{display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:800}
+.bascule{width:58px;height:34px;border-radius:999px;background:rgba(255,255,255,.18);position:relative;transition:background .2s;flex:none}
+.bascule::after{content:"";position:absolute;top:4px;left:4px;width:26px;height:26px;border-radius:50%;background:#fff;transition:left .2s}
+.bascule[aria-checked="true"]{background:var(--menthe)}
+.bascule[aria-checked="true"]::after{left:28px}
+#prochaine{font-size:15px;font-weight:700;color:var(--soleil)}
+#btn-enregistrer{margin-top:auto;width:100%;background:var(--menthe);color:#0d3b25;box-shadow:0 7px 0 #2f9e68,0 14px 24px rgba(0,0,0,.35)}
+#btn-enregistrer:active{box-shadow:0 2px 0 #2f9e68}
+#toast-reglages{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);opacity:0;pointer-events:none;transition:opacity .2s;
+  font-weight:900;padding:10px 18px;border-radius:16px;background:var(--encre);color:#3b1606;z-index:30;white-space:nowrap}
+#toast-reglages.vu{opacity:1}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="ciel"></div>
+<div id="soleil"></div>
+<div id="flash"></div>
+<main id="app">
+  <section class="ecran actif" id="ecran-menu">
+    <div class="haut" style="width:100%"><span class="puce">RÉVEIL RFID</span><span class="haut-droite"><span class="puce" id="code">#DÉMO</span><button class="engrenage" id="btn-reglages" aria-label="Réglages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></span></div>
+    <div class="logo"><span class="l1">DÉFI DU</span><span class="l2">MATIN</span></div>
+    <div id="rouleau"></div>
+    <button class="btn3d" id="btn-jouer">▶ JOUER</button>
+  </section>
+
+  <section class="ecran" id="ecran-jeu">
+    <div class="hud"><span class="icone" id="icone-jeu"></span><span id="nom-jeu"></span><span id="chrono">0:00</span></div>
+    <div id="etoiles"></div>
+    <div id="zone"></div>
+  </section>
+
+  <section class="ecran" id="ecran-reglages">
+    <div class="titre-reglages"><button class="engrenage" id="btn-retour" aria-label="Retour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>RÉGLAGES</h2></div>
+    <div class="carte">
+      <h3>HEURE DU RÉVEIL</h3>
+      <div class="heure-tel"><span id="heure-tel">--:--</span><span id="sync" class="demo">Non envoyée</span></div>
+    </div>
+    <div class="carte">
+      <h3>ALARME</h3>
+      <div class="selecteur">
+        <div class="colonne"><button data-r="h+" aria-label="Heure plus">+</button><span class="valeur" id="val-h">07</span><button data-r="h-" aria-label="Heure moins">−</button></div>
+        <span class="deux-points">:</span>
+        <div class="colonne"><button data-r="m+" aria-label="Minutes plus">+</button><span class="valeur" id="val-m">30</span><button data-r="m-" aria-label="Minutes moins">−</button></div>
+      </div>
+      <div id="jours"></div>
+      <div class="ligne"><span>Alarme activée</span><button class="bascule" id="bascule" role="switch" aria-checked="true" aria-label="Alarme activée"></button></div>
+      <p id="prochaine"></p>
+    </div>
+    <button class="btn3d" id="btn-enregistrer">ENREGISTRER</button>
+  </section>
+
+  <section class="ecran" id="ecran-gagne">
+    <span class="alarme">ÉTAPE 1/2 RÉUSSIE</span>
+    <div class="titre">GAGNÉ !</div>
+    <div id="note"><i></i><i></i><i></i></div>
+    <div id="temps">0 s</div>
+    <div class="etape-badge" id="etape" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="13" height="16" rx="2.5"/><circle cx="9.5" cy="11" r="2.2"/><path d="M6.5 17h6"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
+      <span><b id="etape-titre">PASSE TON BADGE</b><small id="etape-texte">sur le réveil pour couper l'alarme</small></span>
+    </div>
+    <button class="btn3d" id="btn-nfc" hidden>RÉESSAYER</button>
+    <button class="btn3d" id="btn-menu">MENU</button>
+  </section>
+</main>
+<div id="toast-reglages"></div>
+<div id="intro"><div class="grosse" id="intro-icone"></div><h2 id="intro-nom"></h2><p id="intro-regle"></p><div id="decompte">3</div></div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+
+  /* ---------- Code du jour (lien NFC : ?code=4821) et lien avec la carte ---------- */
+  var code=(location.search.match(/[?&]code=(\d+)/)||[])[1]||"";
+  $("code").textContent = code ? "#"+code : "#DÉMO";
+  /* ---------- NFC (Chrome Android) : le téléphone écrit dans la puce M24SR du réveil ---------- */
+  function ecrireNFC(texte, ok, ko){
+    if(!("NDEFReader" in window)){ ko("NFC INDISPONIBLE"); return; }
+    var ctl=new AbortController(), t=setTimeout(function(){ctl.abort();},30000);
+    new NDEFReader().write({records:[{recordType:"text",lang:"fr",data:texte}]},{signal:ctl.signal})
+      .then(function(){clearTimeout(t);ok();})
+      .catch(function(e){clearTimeout(t);ko(e&&e.name==="NotAllowedError"?"AUTORISE LE NFC":"RÉESSAYER");});
+  }
+  function etape(titre,texte){ $("etape-titre").textContent=titre; $("etape-texte").textContent=texte; }
+  function envoyerVictoire(){
+    $("btn-nfc").hidden=true;
+    etape("POSE TON TÉLÉPHONE","sur le réveil");
+    ecrireNFC("GAGNE-"+code,
+      function(){ bip(1047,.15); setTimeout(function(){bip(1568,.25);},150);
+                  etape("PASSE TON BADGE","sur le réveil pour couper l'alarme"); },
+      function(m){ etape("POSE TON TÉLÉPHONE","sur le réveil"); $("btn-nfc").textContent=m; $("btn-nfc").hidden=false; });
+  }
+  function signalerVictoire(){
+    if(!code){ etape("PASSE TON BADGE","sur le réveil pour couper l'alarme"); $("btn-nfc").hidden=true; return; } /* démo */
+    envoyerVictoire();
+  }
+  $("btn-nfc").onclick=function(){ bip(600,.04); envoyerVictoire(); };
+
+  /* ---------- Icônes ---------- */
+  var S='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">';
+  var ICONES={
+    calcul:S+'<path d="M5 8h6M8 5v6M14 8h5M5 17h6M14 15l5 5M19 15l-5 5"/></svg>',
+    memoire:S+'<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" fill="currentColor"/></svg>',
+    reflexes:S+'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor"/></svg>',
+    couleurs:S+'<path d="M12 3c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0C6 10.4 8.5 7.2 12 3z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg>',
+    ordre:S+'<path d="M5 5l2-1.5V11M4.5 11h4M13 5.5a2.2 2.2 0 0 1 4.2.6c0 1.6-4.2 3.2-4.2 4.9h4.3M5 15.5h3.2l-2 2.2a2 2 0 1 1-1.6 2.9"/></svg>'
+  };
+  var JEUX=[
+    {id:"calcul",  nom:"Calcul éclair",   regle:"3 opérations en 30 s"},
+    {id:"memoire", nom:"Mémoire",         regle:"Répète les couleurs"},
+    {id:"reflexes",nom:"Réflexes",        regle:"Touche 10 cibles"},
+    {id:"couleurs",nom:"Piège à couleurs",regle:"Touche la couleur de l'encre"},
+    {id:"ordre",   nom:"Chiffres en ordre",regle:"Touche de 1 à 9"}
+  ];
+
+  /* ---------- Ciel étoilé + lever du soleil (0 = nuit, 1 = jour) ---------- */
+  (function(){ var c=$("ciel"); for(var i=0;i<40;i++){ var e=document.createElement("span"); e.className="etoile";
+    e.style.left=Math.random()*100+"%"; e.style.top=Math.random()*70+"%"; e.style.animationDelay=(Math.random()*2.4)+"s"; c.appendChild(e);} })();
+  function melange(a,b,t){var x=parseInt(a.slice(1),16),y=parseInt(b.slice(1),16);
+    return "rgb("+[16,8,0].map(function(s){var u=(x>>s)&255,v=(y>>s)&255;return Math.round(u+(v-u)*t);}).join(",")+")";}
+  function jour(t){ t=Math.max(0,Math.min(1,t));
+    $("ciel").style.background="linear-gradient(to top,"+melange("#2b2f6b","#ff9a62",t)+","+melange("#141a3a","#ffd9a0",t)+")";
+    $("soleil").style.bottom=(-215+t*250)+"px";
+    document.querySelectorAll(".etoile").forEach(function(e){e.style.visibility=t>.6?"hidden":"visible";}); }
+
+  /* ---------- Sons (après un toucher) ---------- */
+  var audio=null;
+  function bip(f,d){ try{ audio=audio||new (window.AudioContext||window.webkitAudioContext)();
+    var o=audio.createOscillator(),g=audio.createGain(); o.type="triangle"; o.frequency.value=f; o.connect(g); g.connect(audio.destination);
+    g.gain.setValueAtTime(.1,audio.currentTime); g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+(d||.12));
+    o.start(); o.stop(audio.currentTime+(d||.12)); }catch(e){} }
+
+  /* ---------- Outils communs ---------- */
+  var minuteries=[],partie=0,debut=0,jeuActuel=null;
+  function plus_tard(f,ms){var p=partie;minuteries.push(setTimeout(function(){if(p===partie)f();},ms));}
+  function tout_arreter(){partie++;minuteries.forEach(clearTimeout);minuteries=[];}
+  function montrer(id){document.querySelectorAll(".ecran").forEach(function(e){e.classList.toggle("actif",e.id===id);});}
+  function etoiles(n,ok){var h="";for(var i=0;i<n;i++)h+='<i class="'+(i<ok?"ok":"")+'"></i>';$("etoiles").innerHTML=h;}
+  function toast(t,mauvais){var z=$("toast");if(!z)return;z.textContent=t;z.className="vu"+(mauvais?" mauvais":"");
+    clearTimeout(z._t);z._t=setTimeout(function(){z.className="";},700);}
+  function flash(c){var f=$("flash");f.style.background=c;f.style.opacity=".35";setTimeout(function(){f.style.opacity="0";},150);}
+  function bien(){bip(880,.09);flash("#5fe0a0");}
+  function rate(t){bip(180,.3);flash("#ff5c7a");toast(t||"RATÉ !",true);}
+  function zone(html){$("zone").innerHTML=html+'<div id="toast"></div>';}
+  function melanger(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t;}return a;}
+
+  function chrono(secondes,auBout){
+    var fin=secondes?Date.now()+secondes*1000:0,p=partie;
+    (function tic(){ if(p!==partie)return;
+      var s=fin?Math.max(0,Math.ceil((fin-Date.now())/1000)):Math.floor((Date.now()-debut)/1000);
+      $("chrono").textContent=Math.floor(s/60)+":"+("0"+(s%60)).slice(-2);
+      $("chrono").classList.toggle("urgent",!!fin&&s<=5);
+      if(fin&&s===0){auBout();return;} setTimeout(tic,200); })();
+  }
+
+  /* ---------- Accueil : roulette puis lancement direct ---------- */
+  $("rouleau").innerHTML=JEUX.map(function(j){return '<span class="tuile">'+ICONES[j.id]+'</span>';}).join("");
+  var tuiles=$("rouleau").children, enCours=false;
+  $("btn-jouer").onclick=function(){
+    if(enCours)return; enCours=true; bip(440,.05);
+    var cible=Math.floor(Math.random()*JEUX.length), pas=JEUX.length*2+cible, i=0, delai=60;
+    (function tourne(){
+      for(var k=0;k<tuiles.length;k++)tuiles[k].classList.toggle("choisi",k===i%JEUX.length);
+      bip(520+(i%JEUX.length)*60,.04);
+      if(i>=pas){ setTimeout(function(){enCours=false;lancer(JEUX[cible]);},450); return; }
+      i++; delai*=1.13; setTimeout(tourne,delai);
+    })();
+  };
+
+  function lancer(j){
+    tout_arreter(); jeuActuel=j; jour(0);
+    $("icone-jeu").innerHTML=ICONES[j.id]; $("nom-jeu").textContent=j.nom; $("chrono").textContent="0:00";
+    $("intro-icone").innerHTML=ICONES[j.id]; $("intro-nom").textContent=j.nom; $("intro-regle").textContent=j.regle;
+    $("intro").className="vu"; montrer("ecran-jeu"); zone(""); etoiles(0,0);
+    var n=3,p=partie;
+    (function compte(){ if(p!==partie)return;
+      var d=$("decompte"); d.textContent=n>0?n:"GO !"; d.style.animation="none"; void d.offsetWidth; d.style.animation="";
+      bip(n>0?600:900,.12);
+      if(n<0){ $("intro").className=""; debut=Date.now(); ({calcul:calcul,memoire:memoire,reflexes:reflexes,couleurs:couleurs,ordre:ordre})[j.id](); return; }
+      n--; setTimeout(compte,n<0?450:650); })();
+  }
+
+  function gagner(){
+    tout_arreter(); var s=Math.round((Date.now()-debut)/1000), nb=s<=15?3:s<=30?2:1;
+    jour(1); bip(784,.12); setTimeout(function(){bip(1047,.12);},120); setTimeout(function(){bip(1319,.3);},240);
+    var note=$("note").children; for(var k=0;k<3;k++)note[k].className=k<nb?"ok":"";
+    $("temps").textContent=jeuActuel.nom+" · "+s+" s";
+    montrer("ecran-gagne"); confettis(); signalerVictoire(jeuActuel.id,s);
+  }
+  function confettis(){ if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
+    var c=["#ffd166","#ff5c7a","#5fe0a0","#5aa9ff","#fff8ee"];
+    for(var i=0;i<60;i++){var e=document.createElement("i");e.className="confetti";e.style.left=Math.random()*100+"vw";
+      e.style.background=c[i%5];e.style.animationDuration=(1.6+Math.random()*1.6)+"s";e.style.animationDelay=(Math.random()*.5)+"s";
+      document.body.appendChild(e);setTimeout(function(x){return function(){x.remove();};}(e),4000);} }
+  $("btn-menu").onclick=function(){tout_arreter();jour(0);montrer("ecran-menu");for(var k=0;k<tuiles.length;k++)tuiles[k].classList.remove("choisi");};
+
+  /* ===== 1. Calcul éclair : 3 bonnes réponses en 30 s ===== */
+  function calcul(){
+    var total=3,faites=0,saisie="",q;
+    zone('<div class="question"></div><div class="reponse"></div><div class="clavier">'+
+      ["1","2","3","4","5","6","7","8","9","⌫","0","OK"].map(function(k){return '<button class="'+(k==="OK"?"valider":"")+'" data-k="'+k+'">'+k+'</button>';}).join("")+'</div>');
+    function nouvelle(){ var t=Math.floor(Math.random()*3),a,b;
+      if(t===0){a=11+Math.floor(Math.random()*39);b=11+Math.floor(Math.random()*39);q={x:a+" + "+b,r:a+b};}
+      else if(t===1){a=30+Math.floor(Math.random()*60);b=11+Math.floor(Math.random()*(a-11));q={x:a+" − "+b,r:a-b};}
+      else{a=3+Math.floor(Math.random()*7);b=3+Math.floor(Math.random()*7);q={x:a+" × "+b,r:a*b};}
+      saisie="";maj(); }
+    function maj(){$("zone").querySelector(".question").textContent=q.x;$("zone").querySelector(".reponse").textContent=saisie;}
+    $("zone").querySelector(".clavier").onclick=function(e){ var k=e.target.getAttribute("data-k"); if(!k)return;
+      if(k==="⌫")saisie=saisie.slice(0,-1);
+      else if(k==="OK"){ if(!saisie)return;
+        if(+saisie===q.r){faites++;bien();etoiles(total,faites);jour(faites/total*.85);if(faites===total){gagner();return;}nouvelle();return;}
+        var r=$("zone").querySelector(".reponse");r.classList.remove("secoue");void r.offsetWidth;r.classList.add("secoue");rate();nouvelle();return; }
+      else if(saisie.length<3){saisie+=k;bip(700,.03);}
+      maj(); };
+    function depart(){faites=0;etoiles(total,0);jour(0);nouvelle();chrono(30,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
+    depart();
+  }
+
+  /* ===== 2. Mémoire : suites de 3, 4 puis 5 couleurs ===== */
+  function memoire(){
+    var cols=["#ff5c7a","#5aa9ff","#ffd166","#5fe0a0"],fq=[330,440,550,660],longs=[3,4,5],manche=0,suite=[],pos=0,ecoute=false;
+    zone('<div class="pads">'+cols.map(function(c,i){return '<button class="pad" data-c="'+i+'" style="background:'+c+'" aria-label="Couleur '+(i+1)+'"></button>';}).join("")+'</div>');
+    var pads=$("zone").querySelectorAll(".pad");
+    function allume(i,ms){pads[i].classList.add("allume");bip(fq[i],ms/1000);plus_tard(function(){pads[i].classList.remove("allume");},ms);}
+    function montre(){ ecoute=false;pos=0;suite=[];for(var k=0;k<longs[manche];k++)suite.push(Math.floor(Math.random()*4));
+      toast("REGARDE !");suite.forEach(function(c,k){plus_tard(function(){allume(c,420);},700+k*650);});
+      plus_tard(function(){ecoute=true;toast("À TOI !");},700+suite.length*650); }
+    $("zone").querySelector(".pads").onclick=function(e){ var c=e.target.getAttribute("data-c"); if(c===null||!ecoute)return; c=+c; allume(c,180);
+      if(c!==suite[pos]){ecoute=false;rate();plus_tard(montre,1200);return;}
+      if(++pos===suite.length){ manche++;etoiles(3,manche);jour(manche/3*.85);
+        if(manche===3){plus_tard(gagner,350);return;} ecoute=false;bien();toast("BRAVO !");plus_tard(montre,1000);} };
+    etoiles(3,0);chrono(0);montre();
+  }
+
+  /* ===== 3. Réflexes : 10 cibles, 2 ratées autorisées ===== */
+  function reflexes(){
+    zone('<div id="terrain"></div>');
+    var terrain=$("terrain"),total=10,touchees=0,ratees=0;
+    function suivante(){ var duree=Math.max(700,1500-touchees*80),c=document.createElement("button"),p=partie;
+      c.className="cible";c.setAttribute("aria-label","Cible");c.style.left=(12+Math.random()*76)+"%";c.style.top=(12+Math.random()*76)+"%";
+      c.onclick=function(){ if(p!==partie)return; touchees++;bien();etoiles(total,touchees);jour(touchees/total*.85);c.remove();
+        if(touchees===total){gagner();return;} plus_tard(suivante,250+Math.random()*400); };
+      terrain.appendChild(c);
+      plus_tard(function(){ if(!c.isConnected)return; c.remove(); ratees++;
+        if(ratees>=3){rate("RECOMMENCE");plus_tard(depart,1100);return;} rate("RATÉE "+ratees+"/3");plus_tard(suivante,400); },duree); }
+    function depart(){touchees=0;ratees=0;etoiles(total,0);jour(0);plus_tard(suivante,500);}
+    chrono(0);depart();
+  }
+
+  /* ===== 4. Piège à couleurs : 6 bonnes réponses en 30 s (couleur de l'encre, pas le mot) ===== */
+  function couleurs(){
+    var C=[{n:"ROUGE",c:"#ff5c7a"},{n:"BLEU",c:"#5aa9ff"},{n:"JAUNE",c:"#ffd166"},{n:"VERT",c:"#5fe0a0"}],total=6,ok=0,encre=0,dernier=-1;
+    zone('<div class="mot"></div><div class="pastilles">'+C.map(function(x,i){return '<button data-i="'+i+'" style="background:'+x.c+'" aria-label="'+x.n+'"></button>';}).join("")+'</div>');
+    function nouveau(){ var m;do{encre=Math.floor(Math.random()*4);}while(encre===dernier);dernier=encre;
+      do{m=Math.floor(Math.random()*4);}while(m===encre);
+      var el=$("zone").querySelector(".mot");el.textContent=C[m].n;el.style.color=C[encre].c; }
+    $("zone").querySelector(".pastilles").onclick=function(e){ var i=e.target.getAttribute("data-i"); if(i===null)return;
+      if(+i===encre){ok++;bien();etoiles(total,ok);jour(ok/total*.85);if(ok===total){gagner();return;}}
+      else{ok=Math.max(0,ok-1);etoiles(total,ok);jour(ok/total*.85);rate("L'ENCRE !");}
+      nouveau(); };
+    function depart(){ok=0;etoiles(total,0);jour(0);nouveau();chrono(30,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
+    depart();
+  }
+
+  /* ===== 5. Chiffres en ordre : de 1 à 9 en 25 s ===== */
+  function ordre(){
+    var prochain=1;
+    function depart(){ prochain=1;etoiles(9,0);jour(0);
+      zone('<div class="grille">'+melanger([1,2,3,4,5,6,7,8,9]).map(function(n){return '<button data-n="'+n+'">'+n+'</button>';}).join("")+'</div>');
+      $("zone").querySelector(".grille").onclick=function(e){ var b=e.target,n=+b.getAttribute("data-n"); if(!n||b.classList.contains("fait"))return;
+        if(n===prochain){b.classList.add("fait");bien();etoiles(9,prochain);jour(prochain/9*.85);if(++prochain>9)gagner();}
+        else{b.classList.remove("secoue");void b.offsetWidth;b.classList.add("secoue");rate("CHERCHE "+prochain);} };
+      chrono(25,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);}); }
+    depart();
+  }
+
+  /* ================= Réglages : heure du téléphone + alarme =================
+     Protocole prévu avec la carte (page servie par la STM32) :
+       GET /heure?a=2026&mo=11&j=16&js=1&h=22&mi=5&s=30   (js : 1 = lundi … 7 = dimanche)
+       GET /alarme?h=7&m=30&jours=1111100&on=1             (jours : lundi → dimanche)
+       GET /etat   -> {"h":7,"m":30,"jours":"1111100","on":1}                         */
+  var R={h:7,m:30,jours:"1111100",on:1};
+  try{var sauve=JSON.parse(localStorage.getItem("reveil-reglages")||"null");if(sauve)R=sauve;}catch(e){}
+  var NOMS_J=["L","M","M","J","V","S","D"];
+  $("jours").innerHTML=NOMS_J.map(function(n,i){return '<button data-j="'+i+'" aria-label="Jour '+(i+1)+'">'+n+'</button>';}).join("");
+  function deux(n){return ("0"+n).slice(-2);}
+  function prochaine(){
+    if(!R.on) return "Alarme désactivée";
+    if(R.jours.indexOf("1")<0) return "Choisis au moins un jour";
+    var now=new Date();
+    for(var k=0;k<8;k++){
+      var d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+k,R.h,R.m,0);
+      if(d<=now||R.jours.charAt((d.getDay()+6)%7)!=="1") continue;
+      var min=Math.round((d-now)/60000), quand=k===0?"aujourd'hui":k===1?"demain":["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][d.getDay()];
+      return "Prochaine : "+quand+" à "+deux(R.h)+":"+deux(R.m)+" (dans "+Math.floor(min/60)+" h "+deux(min%60)+")";
+    }
+    return "";
+  }
+  function afficherReglages(){
+    $("val-h").textContent=deux(R.h); $("val-m").textContent=deux(R.m);
+    var b=$("jours").children; for(var i=0;i<7;i++) b[i].classList.toggle("on",R.jours.charAt(i)==="1");
+    $("bascule").setAttribute("aria-checked",R.on?"true":"false");
+    $("prochaine").textContent=prochaine();
+  }
+  /* Message écrit dans le réveil : R;année;mois;jour;jour_semaine(1=lundi);h;min;s;alarme_h;alarme_m;jours;on */
+  function messageReglages(){
+    var d=new Date();
+    return ["R",d.getFullYear(),d.getMonth()+1,d.getDate(),(d.getDay()+6)%7+1,d.getHours(),d.getMinutes(),d.getSeconds(),
+            R.h,R.m,R.jours,R.on].join(";");
+  }
+  var horloge=null;
+  function ouvrirReglages(){
+    montrer("ecran-reglages"); afficherReglages();
+    var tic=function(){var d=new Date();$("heure-tel").textContent=deux(d.getHours())+":"+deux(d.getMinutes())+":"+deux(d.getSeconds());};
+    tic(); clearInterval(horloge); horloge=setInterval(tic,1000);
+  }
+  function fermerReglages(){ clearInterval(horloge); montrer("ecran-menu"); if(location.hash) history.replaceState(null,"",location.pathname+location.search); }
+  function toastR(t){var z=$("toast-reglages");z.textContent=t;z.className="vu";clearTimeout(z._t);z._t=setTimeout(function(){z.className="";},1400);}
+
+  document.querySelector(".selecteur").onclick=function(e){ var r=e.target.getAttribute("data-r"); if(!r)return;
+    if(r==="h+")R.h=(R.h+1)%24; if(r==="h-")R.h=(R.h+23)%24;
+    if(r==="m+")R.m=(R.m+5)%60; if(r==="m-")R.m=(R.m+55)%60;
+    bip(700,.03); afficherReglages(); };
+  $("jours").onclick=function(e){ var j=e.target.getAttribute("data-j"); if(j===null)return; j=+j;
+    R.jours=R.jours.slice(0,j)+(R.jours.charAt(j)==="1"?"0":"1")+R.jours.slice(j+1); bip(600,.03); afficherReglages(); };
+  $("bascule").onclick=function(){ R.on=R.on?0:1; bip(500,.04); afficherReglages(); };
+  $("btn-enregistrer").onclick=function(){
+    if(R.on&&R.jours.indexOf("1")<0){ toastR("Choisis au moins un jour"); bip(200,.2); return; }
+    try{localStorage.setItem("reveil-reglages",JSON.stringify(R));}catch(e){}
+    var b=$("btn-enregistrer"); b.textContent="POSE SUR LE RÉVEIL"; b.disabled=true;
+    ecrireNFC(messageReglages(),
+      function(){ b.textContent="ENREGISTRER"; b.disabled=false; toastR("✓ Réveil réglé");
+                  $("sync").textContent="✓ Envoyée au réveil"; $("sync").className=""; bip(880,.1); },
+      function(m){ b.textContent="ENREGISTRER"; b.disabled=false; toastR(m==="NFC INDISPONIBLE"?"NFC indisponible":"Réessaie"); bip(200,.2); });
+  };
+  $("btn-reglages").onclick=function(){ bip(600,.04); ouvrirReglages(); };
+  $("btn-retour").onclick=fermerReglages;
+  window.addEventListener("hashchange",function(){ if(location.hash==="#reglages") ouvrirReglages(); });
+  if(location.hash==="#reglages") ouvrirReglages();
+
+  jour(0);
+})();
+</script>
+</body>
+</html>
