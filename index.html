@@ -233,7 +233,7 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
   </section>
 </main>
 <div id="toast-reglages"></div>
-<div id="intro"><div class="grosse" id="intro-icone"></div><h2 id="intro-nom"></h2><p id="intro-regle"></p><div id="decompte">3</div></div>
+<div id="intro"><span class="puce" id="intro-niveau"></span><div class="grosse" id="intro-icone"></div><h2 id="intro-nom"></h2><p id="intro-regle"></p><div id="decompte">3</div></div>
 
 <script>
 (function(){
@@ -275,12 +275,22 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
     ordre:S+'<path d="M5 5l2-1.5V11M4.5 11h4M13 5.5a2.2 2.2 0 0 1 4.2.6c0 1.6-4.2 3.2-4.2 4.9h4.3M5 15.5h3.2l-2 2.2a2 2 0 1 1-1.6 2.9"/></svg>'
   };
   var JEUX=[
-    {id:"calcul",  nom:"Calcul éclair",   regle:"3 opérations en 30 s"},
-    {id:"memoire", nom:"Mémoire",         regle:"Répète les couleurs"},
-    {id:"reflexes",nom:"Réflexes",        regle:"Touche 10 cibles"},
-    {id:"couleurs",nom:"Piège à couleurs",regle:"Touche la couleur de l'encre"},
-    {id:"ordre",   nom:"Chiffres en ordre",regle:"Touche de 1 à 9"}
+    {id:"calcul",  nom:"Calcul éclair"},
+    {id:"memoire", nom:"Mémoire"},
+    {id:"reflexes",nom:"Réflexes"},
+    {id:"couleurs",nom:"Piège à couleurs"},
+    {id:"ordre",   nom:"Chiffres en ordre"}
   ];
+  /* ---------- Marathon : 3 jeux d'affilée, de plus en plus durs (environ 2 min) ---------- */
+  var NIVEAUX=3, niv=1, faits=[], debutMarathon=0;
+  function regle(id,n){ return {
+    calcul:  (3+n)+" opérations en "+(25+n*10)+" s",
+    memoire: "Suites de "+(2+n)+" à "+(4+n)+" couleurs",
+    reflexes:"Touche "+(6+n*4)+" cibles",
+    couleurs:(3+n*3)+" fois la couleur de l'encre",
+    ordre:   n===1?"De 1 à 9":n===2?"De 9 à 1":"De 1 à 9 puis de 9 à 1"
+  }[id]; }
+  function ciel(t){ jour((niv-1+t/.85)/NIVEAUX*.9); }   /* le soleil monte sur tout le marathon */
 
   /* ---------- Ciel étoilé + lever du soleil (0 = nuit, 1 = jour) ---------- */
   (function(){ var c=$("ciel"); for(var i=0;i<40;i++){ var e=document.createElement("span"); e.className="etoile";
@@ -326,7 +336,7 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
   $("rouleau").innerHTML=JEUX.map(function(j){return '<span class="tuile">'+ICONES[j.id]+'</span>';}).join("");
   var tuiles=$("rouleau").children, enCours=false;
   $("btn-jouer").onclick=function(){
-    if(enCours)return; enCours=true; bip(440,.05);
+    if(enCours)return; enCours=true; bip(440,.05); niv=1; faits=[]; debutMarathon=0;
     var cible=Math.floor(Math.random()*JEUX.length), pas=JEUX.length*2+cible, i=0, delai=60;
     (function tourne(){
       for(var k=0;k<tuiles.length;k++)tuiles[k].classList.toggle("choisi",k===i%JEUX.length);
@@ -337,23 +347,31 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
   };
 
   function lancer(j){
-    tout_arreter(); jeuActuel=j; jour(0);
-    $("icone-jeu").innerHTML=ICONES[j.id]; $("nom-jeu").textContent=j.nom; $("chrono").textContent="0:00";
-    $("intro-icone").innerHTML=ICONES[j.id]; $("intro-nom").textContent=j.nom; $("intro-regle").textContent=j.regle;
+    tout_arreter(); jeuActuel=j; faits.push(j.id); ciel(0);
+    $("icone-jeu").innerHTML=ICONES[j.id]; $("nom-jeu").textContent=j.nom+" · "+niv+"/"+NIVEAUX; $("chrono").textContent="0:00";
+    $("intro-niveau").textContent="NIVEAU "+niv+"/"+NIVEAUX;
+    $("intro-icone").innerHTML=ICONES[j.id]; $("intro-nom").textContent=j.nom; $("intro-regle").textContent=regle(j.id,niv);
     $("intro").className="vu"; montrer("ecran-jeu"); zone(""); etoiles(0,0);
     var n=3,p=partie;
     (function compte(){ if(p!==partie)return;
       var d=$("decompte"); d.textContent=n>0?n:"GO !"; d.style.animation="none"; void d.offsetWidth; d.style.animation="";
       bip(n>0?600:900,.12);
-      if(n<0){ $("intro").className=""; debut=Date.now(); ({calcul:calcul,memoire:memoire,reflexes:reflexes,couleurs:couleurs,ordre:ordre})[j.id](); return; }
+      if(n<0){ $("intro").className=""; debut=Date.now(); if(!debutMarathon)debutMarathon=debut; ({calcul:calcul,memoire:memoire,reflexes:reflexes,couleurs:couleurs,ordre:ordre})[j.id](); return; }
       n--; setTimeout(compte,n<0?450:650); })();
   }
 
   function gagner(){
-    tout_arreter(); var s=Math.round((Date.now()-debut)/1000), nb=s<=15?3:s<=30?2:1;
-    jour(1); bip(784,.12); setTimeout(function(){bip(1047,.12);},120); setTimeout(function(){bip(1319,.3);},240);
+    tout_arreter(); bip(784,.12); setTimeout(function(){bip(1047,.12);},120);
+    if(niv<NIVEAUX){                                   /* jeu suivant, différent des précédents */
+      ciel(.85); toast("NIVEAU "+(niv+1)+" !"); niv++;
+      var reste=JEUX.filter(function(x){return faits.indexOf(x.id)<0;});
+      var suivant=reste[Math.floor(Math.random()*reste.length)];
+      plus_tard(function(){lancer(suivant);},1200); return;
+    }
+    var s=Math.round((Date.now()-debutMarathon)/1000), nb=s<=100?3:s<=150?2:1;
+    jour(1); setTimeout(function(){bip(1319,.3);},240);
     var note=$("note").children; for(var k=0;k<3;k++)note[k].className=k<nb?"ok":"";
-    $("temps").textContent=jeuActuel.nom+" · "+s+" s";
+    $("temps").textContent=NIVEAUX+" jeux · "+Math.floor(s/60)+" min "+("0"+(s%60)).slice(-2)+" s";
     montrer("ecran-gagne"); confettis(); signalerVictoire(jeuActuel.id,s);
   }
   function confettis(){ if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
@@ -365,29 +383,29 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
 
   /* ===== 1. Calcul éclair : 3 bonnes réponses en 30 s ===== */
   function calcul(){
-    var total=3,faites=0,saisie="",q;
+    var total=3+niv,faites=0,saisie="",q,grand=39+niv*20;
     zone('<div class="question"></div><div class="reponse"></div><div class="clavier">'+
       ["1","2","3","4","5","6","7","8","9","⌫","0","OK"].map(function(k){return '<button class="'+(k==="OK"?"valider":"")+'" data-k="'+k+'">'+k+'</button>';}).join("")+'</div>');
     function nouvelle(){ var t=Math.floor(Math.random()*3),a,b;
-      if(t===0){a=11+Math.floor(Math.random()*39);b=11+Math.floor(Math.random()*39);q={x:a+" + "+b,r:a+b};}
-      else if(t===1){a=30+Math.floor(Math.random()*60);b=11+Math.floor(Math.random()*(a-11));q={x:a+" − "+b,r:a-b};}
-      else{a=3+Math.floor(Math.random()*7);b=3+Math.floor(Math.random()*7);q={x:a+" × "+b,r:a*b};}
+      if(t===0){a=11+Math.floor(Math.random()*grand);b=11+Math.floor(Math.random()*grand);q={x:a+" + "+b,r:a+b};}
+      else if(t===1){a=30+Math.floor(Math.random()*(grand+20));b=11+Math.floor(Math.random()*(a-11));q={x:a+" − "+b,r:a-b};}
+      else{a=3+Math.floor(Math.random()*(5+niv*2));b=3+Math.floor(Math.random()*(5+niv*2));q={x:a+" × "+b,r:a*b};}
       saisie="";maj(); }
     function maj(){$("zone").querySelector(".question").textContent=q.x;$("zone").querySelector(".reponse").textContent=saisie;}
     $("zone").querySelector(".clavier").onclick=function(e){ var k=e.target.getAttribute("data-k"); if(!k)return;
       if(k==="⌫")saisie=saisie.slice(0,-1);
       else if(k==="OK"){ if(!saisie)return;
-        if(+saisie===q.r){faites++;bien();etoiles(total,faites);jour(faites/total*.85);if(faites===total){gagner();return;}nouvelle();return;}
+        if(+saisie===q.r){faites++;bien();etoiles(total,faites);ciel(faites/total*.85);if(faites===total){gagner();return;}nouvelle();return;}
         var r=$("zone").querySelector(".reponse");r.classList.remove("secoue");void r.offsetWidth;r.classList.add("secoue");rate();nouvelle();return; }
       else if(saisie.length<3){saisie+=k;bip(700,.03);}
       maj(); };
-    function depart(){faites=0;etoiles(total,0);jour(0);nouvelle();chrono(30,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
+    function depart(){faites=0;etoiles(total,0);ciel(0);nouvelle();chrono(25+niv*10,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
     depart();
   }
 
   /* ===== 2. Mémoire : suites de 3, 4 puis 5 couleurs ===== */
   function memoire(){
-    var cols=["#ff5c7a","#5aa9ff","#ffd166","#5fe0a0"],fq=[330,440,550,660],longs=[3,4,5],manche=0,suite=[],pos=0,ecoute=false;
+    var cols=["#ff5c7a","#5aa9ff","#ffd166","#5fe0a0"],fq=[330,440,550,660],longs=[2+niv,3+niv,4+niv],manche=0,suite=[],pos=0,ecoute=false;
     zone('<div class="pads">'+cols.map(function(c,i){return '<button class="pad" data-c="'+i+'" style="background:'+c+'" aria-label="Couleur '+(i+1)+'"></button>';}).join("")+'</div>');
     var pads=$("zone").querySelectorAll(".pad");
     function allume(i,ms){pads[i].classList.add("allume");bip(fq[i],ms/1000);plus_tard(function(){pads[i].classList.remove("allume");},ms);}
@@ -396,7 +414,7 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
       plus_tard(function(){ecoute=true;toast("À TOI !");},700+suite.length*650); }
     $("zone").querySelector(".pads").onclick=function(e){ var c=e.target.getAttribute("data-c"); if(c===null||!ecoute)return; c=+c; allume(c,180);
       if(c!==suite[pos]){ecoute=false;rate();plus_tard(montre,1200);return;}
-      if(++pos===suite.length){ manche++;etoiles(3,manche);jour(manche/3*.85);
+      if(++pos===suite.length){ manche++;etoiles(3,manche);ciel(manche/3*.85);
         if(manche===3){plus_tard(gagner,350);return;} ecoute=false;bien();toast("BRAVO !");plus_tard(montre,1000);} };
     etoiles(3,0);chrono(0);montre();
   }
@@ -404,42 +422,45 @@ button:focus-visible{outline:3px solid var(--soleil);outline-offset:3px}
   /* ===== 3. Réflexes : 10 cibles, 2 ratées autorisées ===== */
   function reflexes(){
     zone('<div id="terrain"></div>');
-    var terrain=$("terrain"),total=10,touchees=0,ratees=0;
-    function suivante(){ var duree=Math.max(700,1500-touchees*80),c=document.createElement("button"),p=partie;
+    var terrain=$("terrain"),total=6+niv*4,touchees=0,ratees=0;
+    function suivante(){ var duree=Math.max(550,1550-niv*150-touchees*60),c=document.createElement("button"),p=partie;
       c.className="cible";c.setAttribute("aria-label","Cible");c.style.left=(12+Math.random()*76)+"%";c.style.top=(12+Math.random()*76)+"%";
-      c.onclick=function(){ if(p!==partie)return; touchees++;bien();etoiles(total,touchees);jour(touchees/total*.85);c.remove();
+      c.onclick=function(){ if(p!==partie)return; touchees++;bien();etoiles(total,touchees);ciel(touchees/total*.85);c.remove();
         if(touchees===total){gagner();return;} plus_tard(suivante,250+Math.random()*400); };
       terrain.appendChild(c);
       plus_tard(function(){ if(!c.isConnected)return; c.remove(); ratees++;
         if(ratees>=3){rate("RECOMMENCE");plus_tard(depart,1100);return;} rate("RATÉE "+ratees+"/3");plus_tard(suivante,400); },duree); }
-    function depart(){touchees=0;ratees=0;etoiles(total,0);jour(0);plus_tard(suivante,500);}
+    function depart(){touchees=0;ratees=0;etoiles(total,0);ciel(0);plus_tard(suivante,500);}
     chrono(0);depart();
   }
 
   /* ===== 4. Piège à couleurs : 6 bonnes réponses en 30 s (couleur de l'encre, pas le mot) ===== */
   function couleurs(){
-    var C=[{n:"ROUGE",c:"#ff5c7a"},{n:"BLEU",c:"#5aa9ff"},{n:"JAUNE",c:"#ffd166"},{n:"VERT",c:"#5fe0a0"}],total=6,ok=0,encre=0,dernier=-1;
+    var C=[{n:"ROUGE",c:"#ff5c7a"},{n:"BLEU",c:"#5aa9ff"},{n:"JAUNE",c:"#ffd166"},{n:"VERT",c:"#5fe0a0"}],total=3+niv*3,ok=0,encre=0,dernier=-1;
     zone('<div class="mot"></div><div class="pastilles">'+C.map(function(x,i){return '<button data-i="'+i+'" style="background:'+x.c+'" aria-label="'+x.n+'"></button>';}).join("")+'</div>');
     function nouveau(){ var m;do{encre=Math.floor(Math.random()*4);}while(encre===dernier);dernier=encre;
       do{m=Math.floor(Math.random()*4);}while(m===encre);
       var el=$("zone").querySelector(".mot");el.textContent=C[m].n;el.style.color=C[encre].c; }
     $("zone").querySelector(".pastilles").onclick=function(e){ var i=e.target.getAttribute("data-i"); if(i===null)return;
-      if(+i===encre){ok++;bien();etoiles(total,ok);jour(ok/total*.85);if(ok===total){gagner();return;}}
-      else{ok=Math.max(0,ok-1);etoiles(total,ok);jour(ok/total*.85);rate("L'ENCRE !");}
+      if(+i===encre){ok++;bien();etoiles(total,ok);ciel(ok/total*.85);if(ok===total){gagner();return;}}
+      else{ok=Math.max(0,ok-1);etoiles(total,ok);ciel(ok/total*.85);rate("L'ENCRE !");}
       nouveau(); };
-    function depart(){ok=0;etoiles(total,0);jour(0);nouveau();chrono(30,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
+    function depart(){ok=0;etoiles(total,0);ciel(0);nouveau();chrono(25+niv*7,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);});}
     depart();
   }
 
   /* ===== 5. Chiffres en ordre : de 1 à 9 en 25 s ===== */
   function ordre(){
-    var prochain=1;
-    function depart(){ prochain=1;etoiles(9,0);jour(0);
+    var tours=niv===1?[1]:niv===2?[-1]:[1,-1], tour=0, prochain, faitsT=0, total=9*tours.length;
+    function grille(){ prochain=tours[tour]>0?1:9;
       zone('<div class="grille">'+melanger([1,2,3,4,5,6,7,8,9]).map(function(n){return '<button data-n="'+n+'">'+n+'</button>';}).join("")+'</div>');
       $("zone").querySelector(".grille").onclick=function(e){ var b=e.target,n=+b.getAttribute("data-n"); if(!n||b.classList.contains("fait"))return;
-        if(n===prochain){b.classList.add("fait");bien();etoiles(9,prochain);jour(prochain/9*.85);if(++prochain>9)gagner();}
-        else{b.classList.remove("secoue");void b.offsetWidth;b.classList.add("secoue");rate("CHERCHE "+prochain);} };
-      chrono(25,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);}); }
+        if(n===prochain){ b.classList.add("fait");bien();faitsT++;etoiles(total,faitsT);ciel(faitsT/total*.85);
+          prochain+=tours[tour];
+          if(prochain<1||prochain>9){ if(++tour>=tours.length){gagner();return;} toast("À L'ENVERS !");plus_tard(grille,600); } }
+        else{b.classList.remove("secoue");void b.offsetWidth;b.classList.add("secoue");rate("CHERCHE "+prochain);} }; }
+    function depart(){ tour=0;faitsT=0;etoiles(total,0);ciel(0);grille();
+      chrono(20+niv*12,function(){rate("TEMPS ÉCOULÉ");plus_tard(depart,1100);}); }
     depart();
   }
 
